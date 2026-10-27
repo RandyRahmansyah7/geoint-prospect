@@ -8,13 +8,19 @@ Python engine package, and CI. No analytical features are implemented yet.
 ## Layout
 
 ```
-src/app/       Next.js App Router routes (TypeScript)
+src/app/        Next.js App Router routes (TypeScript)
 src/components/ shadcn/ui components
-src/lib/       shared frontend helpers
-src-tauri/     Tauri 2 desktop shell (Rust)
-engine/        Python analytical engine package
-.github/       CI workflow
+src/lib/        shared frontend helpers
+src-tauri/      Tauri 2 desktop shell (Rust)
+engine/         Python analytical engine package (geoint_prospect)
+database/       database schemas and migrations
+data/           local data manifests and schemas (contents ignored)
+configs/        sources, regions, and analysis configuration
+.github/        CI workflow
 ```
+
+Add `src/features/`, `src/hooks/`, `src/types/`, and `src/config/` when the first feature needs
+them; they are conventions, not directories that must exist empty.
 
 ## Prerequisites
 
@@ -61,9 +67,16 @@ ruff check .
 ruff format --check .
 ```
 
-The engine must stay independent of the UI so it can run locally or in a cloud job later.
-Add the geospatial dependencies (GeoPandas, Shapely, pyproj, NumPy, SciPy, scikit-learn,
-PyArrow) only when a feature needs them.
+The import package is `geoint_prospect`. The engine must stay independent of the UI so it can
+run locally or in a cloud job later. Add the geospatial dependencies (GeoPandas, Shapely,
+pyproj, NumPy, SciPy, scikit-learn, PyArrow) only when a feature needs them.
+
+## Database, data, and configs
+
+`database/` holds schemas and migrations only; no database technology is chosen yet. `data/`
+holds manifests and schemas for local datasets — everything inside it is git-ignored except the
+tracked skeleton. `configs/` holds source, region, and analysis configuration. None of these
+directories may contain credentials or private datasets.
 
 ## Static export constraints
 
@@ -78,5 +91,7 @@ or a sidecar when the first feature needs it.
 
 ## CI
 
-`.github/workflows/ci.yml` runs frontend lint, typecheck, and build, plus engine lint, format
-check, and tests. Cloud analysis jobs are intentionally not part of CI yet.
+`.github/workflows/ci.yml` runs frontend lint, typecheck, and build, engine lint, format check,
+and tests, plus `cargo fmt --check` and `cargo clippy` for the desktop shell (which needs the
+static export first, since Tauri embeds it). Cloud analysis jobs are intentionally not part of
+CI yet.

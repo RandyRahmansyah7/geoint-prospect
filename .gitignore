@@ -20,8 +20,10 @@ venv/
 dist/
 build/
 
-# Local data and generated artifacts
-data/
+# Local data and generated artifacts (data/ keeps only its tracked skeleton)
+data/**
+!data/**/
+!data/**/.gitkeep
 *.pmtiles
 *.sqlite
 *.db

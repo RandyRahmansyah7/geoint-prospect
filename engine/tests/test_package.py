@@ -1,4 +1,4 @@
-from geoint_engine import __version__
+from geoint_prospect import __version__
 
 
 def test_package_imports() -> None:
