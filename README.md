@@ -49,6 +49,19 @@ npm run desktop:build   # bundles the app into src-tauri/target/release/bundle
 The first Rust build takes several minutes. Tauri runs `npm run dev` and `npm run build`
 from the repository root, then loads `out/`.
 
+### "Connection terminated unexpectedly" in the window
+
+That WebKit error page means the window was pointed at `http://localhost:3000` while nothing was
+listening there. Only dev-mode windows do this — a window built with `desktop:build` serves the
+embedded `out/` and needs no server.
+
+- Recovery: start `npm run desktop:dev` again, then reload the open window (right-click → Reload)
+  or close it. Keep that terminal running.
+- Do not launch `src-tauri/target/debug/geoint-prospect` directly, and do not run `cargo run` in
+  `src-tauri`: after `tauri dev` those are dev binaries that expect the dev server.
+- Want a standalone window with no server? `npm run desktop:build -- --debug --no-bundle`, then run
+  `src-tauri/target/debug/geoint-prospect`.
+
 ```bash
 cd src-tauri
 cargo fmt --check
