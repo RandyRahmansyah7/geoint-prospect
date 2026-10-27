@@ -8,10 +8,12 @@ Python engine package, and CI. No analytical features are implemented yet.
 ## Layout
 
 ```
-frontend/    Next.js App Router + TypeScript + Tailwind + shadcn/ui
-src-tauri/   Tauri 2 desktop shell (Rust)
-engine/      Python analytical engine package
-.github/     CI workflow
+src/app/       Next.js App Router routes (TypeScript)
+src/components/ shadcn/ui components
+src/lib/       shared frontend helpers
+src-tauri/     Tauri 2 desktop shell (Rust)
+engine/        Python analytical engine package
+.github/       CI workflow
 ```
 
 ## Prerequisites
@@ -26,7 +28,7 @@ engine/      Python analytical engine package
 ```bash
 npm install
 npm run dev        # http://localhost:3000
-npm run build      # static export to frontend/out
+npm run build      # static export to out/
 npm run lint
 npm run typecheck
 ```
@@ -39,7 +41,7 @@ npm run desktop:build   # bundles the app into src-tauri/target/release/bundle
 ```
 
 The first Rust build takes several minutes. Tauri runs `npm run dev` and `npm run build`
-from the repository root, then loads `frontend/out`.
+from the repository root, then loads `out/`.
 
 ```bash
 cd src-tauri
