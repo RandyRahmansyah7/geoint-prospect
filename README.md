@@ -9,7 +9,7 @@ Python engine package, and CI. No analytical features are implemented yet.
 
 ```
 src/app/        Next.js App Router routes (TypeScript)
-src/components/ shadcn/ui components
+src/components/ layout, workspace chrome, and shadcn/ui components
 src/lib/        shared frontend helpers
 src-tauri/      Tauri 2 desktop shell (Rust)
 engine/         Python analytical engine package (geoint_prospect)

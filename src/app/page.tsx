@@ -1,5 +1,5 @@
-import { WorkspacePlaceholder } from "@/components/layout/workspace-placeholder";
+import { GaiaWorkspace } from "@/components/gaia/gaia-workspace";
 
 export default function GaiaPage() {
-  return <WorkspacePlaceholder title="Gaia" />;
+  return <GaiaWorkspace />;
 }
