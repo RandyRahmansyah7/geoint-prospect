@@ -68,6 +68,7 @@ Kolom Status: issue yang mengerjakan, atau `ditunda` / `luar lingkup`.
 | F-20 | Weather overlay, Share, MTS/MNF, menu aplikasi | Dihilangkan | luar lingkup |
 | F-21 | Legend (kiri bawah peta) | Panel Legend dari rail | ditunda (butuh #10) |
 | F-22 | Aksi objek: Add correlation, Analyze track history, Filter out, Share in chat | Aksi analitik dari engine (correlation, track history, filter) | ditunda (butuh #11, #8) |
+| F-23 | Heatmap kerapatan event di peta (varian gelap) | Heatmap kerapatan objek | belum ada issue — tunggu data nyata |
 
 ### 4.1 Registry nama alat Gaia (issue #4)
 
@@ -77,7 +78,7 @@ Enam nama alat yang disetujui Randy, ditampilkan di tab `Tools` sebagai label pr
 | Nama alat | PRD | Implementasi |
 |---|---|---|
 | Track & Breadcrumbs | F-16 | #12 |
-| Heatmap | F-15 (varian histogram peta) | belum ada issue — tunggu data nyata |
+| Heatmap | F-23 | belum ada issue — tunggu data nyata |
 | Routes & Pathways | F-17 (geometri garis dari data) | #10 |
 | Draw & Spatial Search | F-18 | ditunda (butuh #10) |
 | Time Control | F-14 | #12 |
