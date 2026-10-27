@@ -22,6 +22,13 @@ configs/        sources, regions, and analysis configuration
 Add `src/features/`, `src/hooks/`, `src/types/`, and `src/config/` when the first feature needs
 them; they are conventions, not directories that must exist empty.
 
+## Docs
+
+- [`docs/prd.md`](docs/prd.md) — PRD: design rules, the feature catalog cloned from the reference
+  screenshots, naming map, layout/sizing spec, architecture boundaries, and the issue roadmap.
+  Every feature issue references a PRD section and feature ID.
+- [`docs/engine-api.md`](docs/engine-api.md) — engine CLI/JSON contract (created by issue #8).
+
 ## Prerequisites
 
 - Node.js 22+ and npm
