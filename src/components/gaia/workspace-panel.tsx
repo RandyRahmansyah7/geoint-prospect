@@ -1,6 +1,18 @@
 "use client";
 
-import { ChevronLeft, Database, Layers, Search, Wrench } from "lucide-react";
+import {
+  ChevronLeft,
+  Clock,
+  Database,
+  Flame,
+  Footprints,
+  LassoSelect,
+  Layers,
+  Map as MapIcon,
+  Route,
+  Search,
+  Wrench,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type PanelTab = "layers" | "sources" | "tools";
@@ -10,6 +22,16 @@ const tabs = [
   { id: "sources", label: "Sources", icon: Database },
   { id: "tools", label: "Tools", icon: Wrench },
 ] as const;
+
+// Registered Gaia tool names only — behaviour arrives with their own issues (PRD §4.1).
+const gaiaTools = [
+  { name: "Track & Breadcrumbs", icon: Footprints },
+  { name: "Heatmap", icon: Flame },
+  { name: "Routes & Pathways", icon: Route },
+  { name: "Draw & Spatial Search", icon: LassoSelect },
+  { name: "Time Control", icon: Clock },
+  { name: "Map Layers", icon: MapIcon },
+];
 
 function EmptyState({ text, hint }: { text: string; hint: string }) {
   return (
@@ -94,10 +116,22 @@ export function WorkspacePanel({
         )}
 
         {tab === "tools" && (
-          <EmptyState
-            text="No tools yet."
-            hint="Analytical tools are added with their own issues."
-          />
+          <div className="flex flex-col">
+            <p className="px-2 pb-1 text-[11px] text-muted-foreground/70">
+              Registered names. Behaviour arrives with their own issues.
+            </p>
+            <ul aria-label="Gaia tools" className="flex flex-col">
+              {gaiaTools.map(({ name, icon: Icon }) => (
+                <li
+                  key={name}
+                  className="flex h-8 items-center gap-2 px-2 text-xs text-muted-foreground"
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden />
+                  <span className="truncate">{name}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
     </aside>
