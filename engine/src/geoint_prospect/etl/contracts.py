@@ -30,4 +30,6 @@ class DatasetMetadata(BaseModel):
     location: Path
     ingested_at: datetime | None = None
     row_count: int | None = None
+    licence: str | None = None
+    processing_version: str | None = None
     provenance: dict[str, str] = Field(default_factory=dict)

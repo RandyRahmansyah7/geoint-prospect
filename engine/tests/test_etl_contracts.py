@@ -12,6 +12,8 @@ def test_minimal_metadata_leaves_unknown_values_unknown() -> None:
 
     assert meta.ingested_at is None
     assert meta.row_count is None
+    assert meta.licence is None
+    assert meta.processing_version is None
     assert meta.provenance == {}
 
 
@@ -31,7 +33,9 @@ def test_metadata_round_trips() -> None:
         format=DataFormat.parquet,
         location=Path("out/observations.parquet"),
         ingested_at=datetime(2026, 10, 29, 9, 0, tzinfo=UTC),
-        provenance={"origin": "fixture", "licence": "internal"},
+        licence="internal",
+        processing_version="0.1.0",
+        provenance={"origin": "fixture"},
     )
 
     assert DatasetMetadata(**meta.model_dump()) == meta

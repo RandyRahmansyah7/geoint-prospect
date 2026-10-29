@@ -7,13 +7,12 @@ name = "geoint-engine"
 version = "0.1.0"
 description = "Analytical engine for GEOINT Prospect."
 readme = "README.md"
-requires-python = ">=3.11"
+# The engine runs on GitHub Actions runners (Python 3.12); local execution is not a
+# supported runtime, so the versions pinned here describe the Actions environment.
+requires-python = ">=3.12"
 dependencies = [
-  # shortcut: the dev machine (Intel Celeron N4020) has no AVX2, and the duckdb>=2 / polars>=2
-  # wheels abort with SIGILL there. polars-lts-cpu and duckdb<2 share the same import name and
-  # API; raise these pins when the hardware changes.
-  "duckdb>=1.1,<2",
-  "polars-lts-cpu>=1.9",
+  "duckdb>=1.1",
+  "polars>=1.9",
   "pyarrow>=17",
   "pydantic>=2.7",
 ]

@@ -1,0 +1,126 @@
+name: Backend job
+
+# GitHub Actions is the only backend runtime: the desktop app asks the GitHub API to dispatch this
+# workflow, and reads the run status back. Nothing in here runs on the workstation.
+# See docs/backend-runtime.md for token scopes, storage secrets, and limits.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pipeline:
+        description: Registered engine pipeline to run
+        required: true
+        type: choice
+        options:
+          - healthcheck
+          - tabular-normalize
+      request_id:
+        description: App-generated id used to match this run with the request
+        required: true
+        type: string
+      input_path:
+        description: Repository-relative path of the input dataset
+        required: false
+        default: engine/tests/fixtures/observations.csv
+        type: string
+      dry_run:
+        description: Validate the request without processing or publishing anything
+        required: false
+        default: true
+        type: boolean
+
+run-name: backend ${{ inputs.request_id }}
+
+# Only reading the repository: a pipeline never writes back to it.
+permissions:
+  contents: read
+
+concurrency:
+  # Same request id = same group, so an accidental double dispatch queues instead of running twice.
+  group: backend-${{ inputs.request_id }}
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    name: ${{ inputs.pipeline }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PIPELINE: ${{ inputs.pipeline }}
+      REQUEST_ID: ${{ inputs.request_id }}
+      INPUT_PATH: ${{ inputs.input_path }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      OUTPUT_PATH: ${{ runner.temp }}/geoint/${{ inputs.request_id }}.parquet
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: engine/pyproject.toml
+
+      - name: Install engine
+        run: pip install ./engine
+
+      - name: Reject unsafe input paths
+        run: |
+          set -euo pipefail
+          case "$INPUT_PATH" in
+            /* | *..*)
+              echo "input_path must be a repository-relative path without '..': $INPUT_PATH" >&2
+              exit 2
+              ;;
+          esac
+
+      - name: Run pipeline through the engine CLI
+        run: |
+          set -euo pipefail
+          args=(run --pipeline "$PIPELINE" --request-id "$REQUEST_ID" --input "$INPUT_PATH" \
+                --output "$OUTPUT_PATH" --json)
+          if [ "$DRY_RUN" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          python -m geoint_prospect "${args[@]}" | tee "$RUNNER_TEMP/result.json"
+
+      # Storage secrets stay scoped to this single step and are never echoed.
+      - name: Publish to persistent storage
+        if: ${{ inputs.dry_run == false }}
+        env:
+          STORAGE_BUCKET: ${{ secrets.GEOINT_STORAGE_BUCKET }}
+          STORAGE_ENDPOINT: ${{ secrets.GEOINT_STORAGE_ENDPOINT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.GEOINT_STORAGE_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.GEOINT_STORAGE_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${STORAGE_BUCKET:-}" ]; then
+            echo "::warning::persistent storage is not configured; result is only a debug artifact"
+            exit 0
+          fi
+          aws --endpoint-url "$STORAGE_ENDPOINT" s3 cp \
+            "$OUTPUT_PATH" "s3://$STORAGE_BUCKET/results/$REQUEST_ID.parquet"
+
+      # Artifacts are debugging/transfer only — never permanent storage.
+      - name: Upload debug artifact
+        if: ${{ inputs.dry_run == false }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-${{ inputs.request_id }}
+          path: ${{ runner.temp }}/geoint/*.parquet
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Backend job"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| request id | \`$REQUEST_ID\` |"
+            echo "| pipeline | \`$PIPELINE\` |"
+            echo "| dry run | \`$DRY_RUN\` |"
+            echo "| status | \`${{ job.status }}\` |"
+            echo ""
+            echo "Artifacts (when not a dry run) are debug-only and expire after 7 days."
+          } >> "$GITHUB_STEP_SUMMARY"
