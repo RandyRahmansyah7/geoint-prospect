@@ -50,7 +50,6 @@ jobs:
       REQUEST_ID: ${{ inputs.request_id }}
       INPUT_PATH: ${{ inputs.input_path }}
       DRY_RUN: ${{ inputs.dry_run }}
-      OUTPUT_PATH: ${{ runner.temp }}/geoint/${{ inputs.request_id }}.parquet
     steps:
       - uses: actions/checkout@v7
 
@@ -76,6 +75,8 @@ jobs:
       - name: Run pipeline through the engine CLI
         run: |
           set -euo pipefail
+          # $RUNNER_TEMP is available in the shell; the publish step rebuilds the same path.
+          OUTPUT_PATH="$RUNNER_TEMP/geoint/$REQUEST_ID.parquet"
           args=(run --pipeline "$PIPELINE" --request-id "$REQUEST_ID" --input "$INPUT_PATH" \
                 --output "$OUTPUT_PATH" --json)
           if [ "$DRY_RUN" = "true" ]; then
@@ -93,6 +94,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.GEOINT_STORAGE_SECRET }}
         run: |
           set -euo pipefail
+          OUTPUT_PATH="$RUNNER_TEMP/geoint/$REQUEST_ID.parquet"
           if [ -z "${STORAGE_BUCKET:-}" ]; then
             echo "::warning::persistent storage is not configured; result is only a debug artifact"
             exit 0
