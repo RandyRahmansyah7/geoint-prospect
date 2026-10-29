@@ -8,10 +8,23 @@ version = "0.1.0"
 description = "Analytical engine for GEOINT Prospect."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  # shortcut: the dev machine (Intel Celeron N4020) has no AVX2, and the duckdb>=2 / polars>=2
+  # wheels abort with SIGILL there. polars-lts-cpu and duckdb<2 share the same import name and
+  # API; raise these pins when the hardware changes.
+  "duckdb>=1.1,<2",
+  "polars-lts-cpu>=1.9",
+  "pyarrow>=17",
+  "pydantic>=2.7",
+]
 
 [project.optional-dependencies]
+# pandera is optional: ingest/transform flows run without it. It is repeated in
+# `dev` so the validation tests always run in CI. No `[polars]` extra, because that
+# extra would pull the AVX2-only polars wheel over polars-lts-cpu.
+validate = ["pandera>=0.20"]
 dev = [
+  "pandera>=0.20",
   "pytest>=8",
   "ruff>=0.8",
 ]

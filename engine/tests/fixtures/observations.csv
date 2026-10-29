@@ -1,0 +1,4 @@
+object_id,observed_at,latitude,longitude,confidence,note
+a123,2023-10-01T12:00:00,38.8742,-75.23464,0.82,
+b789,2023-10-01T12:05:00,38.9023,-77.10911,0.66,reviewed
+c456,,,,0.51,pending coordinates

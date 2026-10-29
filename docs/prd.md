@@ -150,7 +150,11 @@ configs/      sumber, region, analisis (di-commit)
 - Batas 4: engine tidak punya server; dipanggil per-perintah (lokal dulu, cloud job nanti).
 - Batas 5: tanpa jaringan kecuali fitur menyatakannya (DR-12).
 
-Kontrak engine (dirinci di issue #7):
+Fondasi ETL engine (kontrak metadata, ingest, transform, SQL, validasi) ada di
+`engine/src/geoint_prospect/etl/` — rinciannya di `engine/README.md`. Perintah CLI (#8) dibangun di
+atas modul itu, bukan menggantikannya.
+
+Kontrak engine (dirinci di issue #8):
 
 ```
 python -m geoint_prospect <command> [--json]
@@ -173,6 +177,7 @@ python -m geoint_prospect <command> [--json]
 | #10 | Render fitur layer (GeoJSON) di peta | F-17, F-06 | #7, #8 |
 | #11 | Seleksi + panel inspector | F-11, F-22 | #10 |
 | #12 | Kontrol waktu: timeline + histogram | F-14, F-15, F-16 | #10 |
+| #13 | Fondasi ETL engine (Polars, DuckDB, Arrow, Pydantic, Pandera) | §9 | #1 |
 
 Belum dibuatkan issue (menunggu prasyarat): F-18 editor geometri + simpan ke `database/`, F-21
 legend, F-06 pembuatan layer, F-22 aksi analitik, heatmap peta (tunggu data nyata), serta workspace
@@ -192,5 +197,5 @@ auto-update.
 | Q-2 | Engine dipanggil bagaimana: `python -m` lokal dulu, atau langsung sidecar binary? | `python -m` dulu untuk dev; sidecar dibahas saat mau dipaketkan. |
 | Q-3 | Persistensi urutan/visibilitas layer di mana? | Preset repo di `configs/analysis/`; state pengguna di app-config dir Tauri. |
 | Q-4 | Format koordinat default? | DD, dengan DMS tersedia di status bar. |
-| Q-5 | F-14/F-15/F-16 perlu sekarang atau setelah ada data waktu? | Setelah #9 punya objek bertimestamp. |
+| Q-5 | F-14/F-15/F-16 perlu sekarang atau setelah ada data waktu? | Setelah #10 punya objek bertimestamp. |
 | Q-6 | Butuh mode "Live"? | Tidak; status bar menampilkan jumlah objek, bukan feed langsung. |
