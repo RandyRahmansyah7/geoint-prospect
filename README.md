@@ -27,7 +27,9 @@ them; they are conventions, not directories that must exist empty.
 - [`docs/prd.md`](docs/prd.md) — PRD: design rules, the feature catalog cloned from the reference
   screenshots, naming map, layout/sizing spec, architecture boundaries, and the issue roadmap.
   Every feature issue references a PRD section and feature ID.
-- [`docs/engine-api.md`](docs/engine-api.md) — engine CLI/JSON contract (created by issue #8).
+- [`docs/backend-runtime.md`](docs/backend-runtime.md) — GitHub Actions runtime, workflow inputs,
+  storage secrets, desktop token handling, and the limits to expect.
+- [`engine/README.md`](engine/README.md) — engine modules, CLI contract, and pipeline registry.
 
 ## Prerequisites
 
@@ -75,21 +77,20 @@ cargo fmt --check
 cargo clippy
 ```
 
-## Engine
+## Engine and backend
+
+**GitHub Actions is the only backend runtime.** The engine never runs on the workstation: the desktop
+app dispatches `backend.yml` through the GitHub API and reads the run status back. See
+[`docs/backend-runtime.md`](docs/backend-runtime.md) for token scopes, storage secrets, and limits.
 
 ```bash
-cd engine
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-pytest
-ruff check .
-ruff format --check .
+python -m geoint_prospect pipelines list          # on a runner, or locally for feedback only
 ```
 
-The import package is `geoint_prospect`. The engine must stay independent of the UI so it can
-run locally or in a cloud job later. Add the geospatial dependencies (GeoPandas, Shapely,
-pyproj, NumPy, SciPy, scikit-learn, PyArrow) only when a feature needs them.
+The import package is `geoint_prospect`. Code quality and tests are verified by the CI `Engine` job;
+a developer may run pytest/ruff locally for quick feedback, but CI is the result that counts. Add the
+geospatial dependencies (GeoPandas, Shapely, pyproj, NumPy, SciPy, scikit-learn) only when a pipeline
+needs them.
 
 ## Database, data, and configs
 

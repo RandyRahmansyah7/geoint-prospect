@@ -147,14 +147,21 @@ configs/      sumber, region, analisis (di-commit)
 - Batas 1: UI tidak membaca file langsung; lewat perintah Tauri.
 - Batas 2: UI tidak menyimpan logika analitik; semua di engine.
 - Batas 3: engine tanpa state, input dari `configs/`/`data/`, output satu JSON envelope.
-- Batas 4: engine tidak punya server; dipanggil per-perintah (lokal dulu, cloud job nanti).
+- Batas 4: **GitHub Actions adalah satu-satunya runtime backend.** Tidak ada server API, worker, atau
+  mode lokal; UI memicu workflow lewat GitHub API dan membaca statusnya (issue #14,
+  `docs/backend-runtime.md`).
 - Batas 5: tanpa jaringan kecuali fitur menyatakannya (DR-12).
+- Batas 6: token GitHub disimpan di keychain OS lewat perintah Tauri; tidak pernah masuk repo, bundle,
+  `localStorage`, atau log.
 
 Fondasi ETL engine (kontrak metadata, ingest, transform, SQL, validasi) ada di
-`engine/src/geoint_prospect/etl/` — rinciannya di `engine/README.md`. Perintah CLI (#8) dibangun di
-atas modul itu, bukan menggantikannya.
+`engine/src/geoint_prospect/etl/`, CLI stabilnya di `engine/src/geoint_prospect/cli.py` — rinciannya
+di `engine/README.md`.
 
-Kontrak engine (dirinci di issue #8):
+Dua workflow: `ci.yml` (validasi kode, tanpa kredensial) dan `backend.yml` (`workflow_dispatch` saja,
+jalur pekerjaan produksi).
+
+Kontrak engine:
 
 ```
 python -m geoint_prospect <command> [--json]
@@ -178,6 +185,7 @@ python -m geoint_prospect <command> [--json]
 | #11 | Seleksi + panel inspector | F-11, F-22 | #10 |
 | #12 | Kontrol waktu: timeline + histogram | F-14, F-15, F-16 | #10 |
 | #13 | Fondasi ETL engine (Polars, DuckDB, Arrow, Pydantic, Pandera) | §9 | #1 |
+| #14 | Runtime backend di GitHub Actions + pemicu dari desktop | §9, `docs/backend-runtime.md` | #13 |
 
 Belum dibuatkan issue (menunggu prasyarat): F-18 editor geometri + simpan ke `database/`, F-21
 legend, F-06 pembuatan layer, F-22 aksi analitik, heatmap peta (tunggu data nyata), serta workspace
@@ -186,15 +194,16 @@ Browser/Graph/Object Explorer/Dossier dan halaman Settings/System Status yang ny
 ## 11. Di luar lingkup saat ini
 
 Tema gelap dan toggle tema; branding; dashboard; API server; database server; data demo dan feed
-langsung; cloud job; penandaan klasifikasi nyata; bundling installer (`.deb`/AppImage) dan
-auto-update.
+langsung; penandaan klasifikasi nyata; bundling installer (`.deb`/AppImage) dan auto-update.
+Catatan: pekerjaan backend **bukan** lagi di luar lingkup — sejak issue #14 backend berjalan di
+GitHub Actions (job-based, bukan API yang selalu hidup).
 
 ## 12. Pertanyaan terbuka
 
 | ID | Pertanyaan | Rekomendasi |
 |----|------------|-------------|
 | Q-1 | Basemap: file PMTiles lokal di `data/basemaps/` atau style online? | Lokal (offline-first, DR-12). File disediakan Randy. |
-| Q-2 | Engine dipanggil bagaimana: `python -m` lokal dulu, atau langsung sidecar binary? | `python -m` dulu untuk dev; sidecar dibahas saat mau dipaketkan. |
+| Q-2 | ~~Engine dipanggil bagaimana~~ | **Dijawab (#13/#14):** hanya lewat GitHub Actions, `python -m geoint_prospect` di runner. Tidak ada runtime lokal atau sidecar. |
 | Q-3 | Persistensi urutan/visibilitas layer di mana? | Preset repo di `configs/analysis/`; state pengguna di app-config dir Tauri. |
 | Q-4 | Format koordinat default? | DD, dengan DMS tersedia di status bar. |
 | Q-5 | F-14/F-15/F-16 perlu sekarang atau setelah ada data waktu? | Setelah #10 punya objek bertimestamp. |
