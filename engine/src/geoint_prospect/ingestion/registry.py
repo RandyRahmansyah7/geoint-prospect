@@ -53,9 +53,12 @@ def load_sources(directory: Path | None = None) -> dict[str, SourceDefinition]:
 
 def resolve(source_id: str, directory: Path | None = None) -> SourceDefinition:
     """Look up one source; unknown or disabled ids are rejected."""
+    directory = directory or sources_dir()
     sources = load_sources(directory)
     try:
         return sources[source_id]
     except KeyError:
         known = ", ".join(sorted(sources)) or "none registered"
-        raise UnknownSourceError(f"unknown source '{source_id}'; registered: {known}") from None
+        raise UnknownSourceError(
+            f"unknown source '{source_id}'; registered: {known} (sources dir: {directory})"
+        ) from None

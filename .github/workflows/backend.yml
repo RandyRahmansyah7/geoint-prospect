@@ -67,7 +67,9 @@ jobs:
           cache-dependency-path: engine/pyproject.toml
 
       - name: Install engine
-        run: pip install ./engine
+        # Editable install: the engine runs from the checkout, so configs/sources and the
+        # repository layout stay visible to it.
+        run: pip install -e ./engine
 
       - name: Reject unsafe input paths
         run: |
