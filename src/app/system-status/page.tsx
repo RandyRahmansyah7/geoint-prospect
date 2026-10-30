@@ -13,7 +13,8 @@ import {
 } from "@/lib/desktop";
 
 const POLL_MS = 5000;
-const PIPELINES = ["healthcheck", "tabular-normalize"] as const;
+const PIPELINES = ["healthcheck", "tabular-normalize", "ingest-tabular"] as const;
+const INGESTION_PIPELINE = "ingest-tabular";
 
 const inputClass =
   "h-7 rounded-md border border-border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-60";
@@ -32,6 +33,7 @@ export default function SystemStatusPage() {
   const [tokenConfigured, setTokenConfigured] = useState<boolean | null>(null);
   const [tokenDraft, setTokenDraft] = useState("");
   const [pipeline, setPipeline] = useState<string>(PIPELINES[0]);
+  const [sourceId, setSourceId] = useState("fixtures-observations");
   const [dryRun, setDryRun] = useState(true);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [status, setStatus] = useState<JobStatus | null>(null);
@@ -104,7 +106,12 @@ export default function SystemStatusPage() {
     setStatus(null);
     const id = crypto.randomUUID();
     try {
-      await dispatchBackendJob({ pipeline, request_id: id, dry_run: dryRun });
+      await dispatchBackendJob({
+        pipeline,
+        request_id: id,
+        source_id: pipeline === INGESTION_PIPELINE ? sourceId.trim() : undefined,
+        dry_run: dryRun,
+      });
       setRequestId(id);
       setMessage("Run dispatched. GitHub Actions queues it before it starts.");
       stopPolling();
@@ -184,6 +191,18 @@ export default function SystemStatusPage() {
               ))}
             </select>
           </Field>
+          {pipeline === INGESTION_PIPELINE && (
+            <Field label="Source id (registry in configs/sources)">
+              <input
+                value={sourceId}
+                onChange={(event) => setSourceId(event.target.value)}
+                placeholder="fixtures-observations"
+                aria-label="Source id"
+                disabled={!desktop || busy}
+                className={`${inputClass} w-56`}
+              />
+            </Field>
+          )}
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <input
               type="checkbox"
@@ -193,7 +212,16 @@ export default function SystemStatusPage() {
             />
             dry run (validate only)
           </label>
-          <Button size="sm" onClick={runJob} disabled={!desktop || busy || !tokenConfigured}>
+          <Button
+            size="sm"
+            onClick={runJob}
+            disabled={
+              !desktop ||
+              busy ||
+              !tokenConfigured ||
+              (pipeline === INGESTION_PIPELINE && !sourceId.trim())
+            }
+          >
             Run job
           </Button>
         </div>

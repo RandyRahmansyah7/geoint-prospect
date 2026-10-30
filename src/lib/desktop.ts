@@ -18,6 +18,7 @@ export type DispatchRequest = {
   pipeline: string;
   request_id: string;
   input_path?: string;
+  source_id?: string;
   dry_run: boolean;
 };
 

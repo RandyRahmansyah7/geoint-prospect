@@ -1,11 +1,14 @@
 """Connector tests: a loopback test server stands in for a public source, no internet, no credentials."""
 
+import hashlib
 import threading
+import time
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from geoint_prospect.etl.contracts import DataFormat
 from geoint_prospect.ingestion.connectors import (
@@ -65,6 +68,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, "text/csv", b"\x00\x01\x02binary")
         elif self.behavior == "wrong-type":
             self._send(200, "application/octet-stream", CSV_BODY)
+        elif self.behavior == "slow":
+            time.sleep(2)
+            self._send(200, "text/csv", CSV_BODY)
         elif self.behavior == "redirect-away":
             self.send_response(302)
             self.send_header("Location", "http://example.com/other.csv")
@@ -107,6 +113,27 @@ def test_http_download_streams_and_hashes(server: str, tmp_path: Path) -> None:
     assert acquired.bytes == len(CSV_BODY)
     assert acquired.content_type == "text/csv"
     assert len(acquired.checksum_sha256) == 64
+
+
+def test_checksum_matches_the_downloaded_bytes(server: str, tmp_path: Path) -> None:
+    acquired = HttpConnector().acquire(_source(uri=server), tmp_path / "staged.csv", _policy())
+
+    assert acquired.checksum_sha256 == hashlib.sha256(CSV_BODY).hexdigest()
+
+
+def test_timeout_is_enforced(server: str, tmp_path: Path) -> None:
+    _Handler.behavior = "slow"
+
+    started = time.monotonic()
+    with pytest.raises(IngestionError, match="failed after 2 attempts"):
+        HttpConnector().acquire(
+            _source(uri=server),
+            tmp_path / "staged.csv",
+            _policy(timeout_seconds=0.5, max_attempts=2),
+        )
+
+    assert time.monotonic() - started < 2  # the slow handler was cut off, not awaited
+    assert not (tmp_path / "staged.csv").exists()
 
 
 def test_retry_succeeds_after_server_error(server: str, tmp_path: Path) -> None:
@@ -205,14 +232,24 @@ def test_connection_failure_reports_attempts(tmp_path: Path) -> None:
 
 def test_file_connector_stages_a_repository_file(tmp_path: Path) -> None:
     source = _source(connector="file", uri=str(FIXTURE))
+    original = (Path(__file__).parent / "fixtures" / "observations.csv").read_bytes()
 
     acquired = FileConnector().acquire(source, tmp_path / "staged.csv", _policy())
 
-    assert acquired.bytes > 0
-    assert (
-        Path(acquired.path).read_bytes()
-        == (Path(__file__).parent / "fixtures" / "observations.csv").read_bytes()
-    )
+    assert Path(acquired.path).read_bytes() == original
+    assert acquired.bytes == len(original)
+    assert acquired.checksum_sha256 == hashlib.sha256(original).hexdigest()
+
+
+def test_policy_bounds_are_validated() -> None:
+    for overrides in (
+        {"max_attempts": 0},
+        {"max_attempts": 9},
+        {"max_bytes": 0},
+        {"timeout_seconds": 0},
+    ):
+        with pytest.raises(ValidationError):
+            IngestionPolicy(**overrides)
 
 
 def test_file_connector_rejects_paths_outside_the_repository(tmp_path: Path) -> None:
