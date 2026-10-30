@@ -113,6 +113,11 @@ jobs:
           fi
           aws --endpoint-url "$STORAGE_ENDPOINT" s3 cp \
             "$OUTPUT_PATH" "s3://$STORAGE_BUCKET/results/$REQUEST_ID.parquet"
+          # The manifest travels with its output so provenance is never orphaned.
+          if [ -f "$OUTPUT_PATH.manifest.json" ]; then
+            aws --endpoint-url "$STORAGE_ENDPOINT" s3 cp \
+              "$OUTPUT_PATH.manifest.json" "s3://$STORAGE_BUCKET/results/$REQUEST_ID.parquet.manifest.json"
+          fi
 
       # Artifacts are debugging/transfer only — never permanent storage.
       - name: Upload debug artifact
@@ -120,7 +125,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: backend-${{ inputs.request_id }}
-          path: ${{ runner.temp }}/geoint/*.parquet
+          path: |
+            ${{ runner.temp }}/geoint/*.parquet
+            ${{ runner.temp }}/geoint/*.manifest.json
           retention-days: 7
 
       - name: Summary
