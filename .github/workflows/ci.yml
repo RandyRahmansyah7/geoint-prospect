@@ -67,5 +67,7 @@ jobs:
       - run: npm run build
       - run: cargo fmt --check
         working-directory: src-tauri
-      - run: cargo clippy -- -D warnings
+      - run: cargo clippy --all-targets -- -D warnings
+        working-directory: src-tauri
+      - run: cargo test
         working-directory: src-tauri
