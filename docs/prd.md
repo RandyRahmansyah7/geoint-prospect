@@ -161,6 +161,11 @@ di `engine/README.md`.
 Dua workflow: `ci.yml` (validasi kode, tanpa kredensial) dan `backend.yml` (`workflow_dispatch` saja,
 jalur pekerjaan produksi).
 
+Akuisisi sumber (issue #15) hidup di `geoint_prospect.ingestion` dan hanya menerima `source_id` dari
+registry `configs/sources/`; connector melakukan streaming ke staging di runner, mencatat manifest
+(checksum, lisensi, provenance), lalu menyerahkan file ke ETL yang sama — tidak ada transformasi ganda
+dan tidak ada connector produksi B2/Filebase di dalam engine.
+
 Kontrak engine:
 
 ```
@@ -186,6 +191,7 @@ python -m geoint_prospect <command> [--json]
 | #12 | Kontrol waktu: timeline + histogram | F-14, F-15, F-16 | #10 |
 | #13 | Fondasi ETL engine (Polars, DuckDB, Arrow, Pydantic, Pandera) | §9 | #1 |
 | #14 | Runtime backend di GitHub Actions + pemicu dari desktop | §9, `docs/backend-runtime.md` | #13 |
+| #15 | Data ingestion (akuisisi sumber) → ETL di runner yang sama | §9, `configs/sources/README.md` | #13, #14 |
 
 Belum dibuatkan issue (menunggu prasyarat): F-18 editor geometri + simpan ke `database/`, F-21
 legend, F-06 pembuatan layer, F-22 aksi analitik, heatmap peta (tunggu data nyata), serta workspace
