@@ -1,0 +1,19 @@
+# Deterministic source used by tests and smoke runs; no network, no credentials.
+source_id = "fixtures-observations"
+connector = "file"
+uri = "engine/tests/fixtures/observations.csv"
+format = "csv"
+licence = "internal-fixture"
+attribution = "GEOINT Prospect test fixture"
+description = "Small observation table shipped with the repository"
+
+# HTTP sources look like this (disabled until a real upstream is agreed):
+#
+# source_id = "example-http"
+# connector = "http"
+# uri = "https://example.org/data/observations.csv"
+# format = "csv"
+# licence = "CC-BY-4.0"
+# attribution = "Example Org"
+# expected_content_types = ["text/csv"]
+# enabled = false

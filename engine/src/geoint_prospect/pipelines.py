@@ -15,6 +15,18 @@ import pydantic
 from geoint_prospect import __version__
 from geoint_prospect.etl.contracts import DataFormat, DatasetMetadata
 from geoint_prospect.etl.pipeline import run_pipeline
+from geoint_prospect.ingestion.acquire import (
+    MANIFEST_SUFFIX,
+    acquire,
+    cleanup_staging,
+    idempotency_key,
+    sanitise_uri,
+    to_dataset_metadata,
+    write_manifest,
+)
+from geoint_prospect.ingestion.connectors import IngestionError
+from geoint_prospect.ingestion.contracts import IngestionManifest, IngestionPolicy, SourceDefinition
+from geoint_prospect.ingestion.registry import UnknownSourceError, resolve
 
 FORMAT_BY_SUFFIX = {".csv": DataFormat.csv, ".parquet": DataFormat.parquet}
 
@@ -30,6 +42,7 @@ class RunRequest:
     input: Path | None = None
     output: Path | None = None
     dataset_id: str | None = None
+    source_id: str | None = None
     dry_run: bool = False
     problems: list[str] = field(default_factory=list)
 
@@ -74,9 +87,114 @@ def _tabular_normalize(request: RunRequest) -> dict[str, object]:
     }
 
 
+def _manifest_path(output: Path) -> Path:
+    return output.with_name(output.name + MANIFEST_SUFFIX)
+
+
+def _source_or_error(source_id: str | None) -> SourceDefinition:
+    if not source_id:
+        raise PipelineError("ingest-tabular needs --source-id")
+    try:
+        return resolve(source_id)
+    except UnknownSourceError as exc:
+        raise PipelineError(str(exc)) from exc
+
+
+def _write_failure_manifest(
+    path: Path, source: SourceDefinition, request: RunRequest, stage: str, reason: str
+) -> None:
+    """Best-effort record so a failed request is still traceable to its source."""
+    manifest = IngestionManifest(
+        source_id=source.source_id,
+        source_uri=sanitise_uri(source.uri),
+        connector=source.connector,
+        format=source.format,
+        request_id=request.request_id,
+        status="failed",
+        acquired_at=None,
+        licence=source.licence,
+        attribution=source.attribution,
+        error=f"[{stage}] {reason}",
+    )
+    try:
+        write_manifest(manifest, path)
+    except OSError:
+        pass  # never mask the original failure
+
+
+def _ingest_tabular(request: RunRequest) -> dict[str, object]:
+    """Acquisition → ETL in one run: the staged file is the ETL input, nothing is transformed twice."""
+    source = _source_or_error(request.source_id)
+    if request.output is None:
+        raise PipelineError("ingest-tabular needs --output")
+    manifest_path = _manifest_path(request.output)
+
+    try:
+        acquired, staging = acquire(source, request.request_id, IngestionPolicy())
+    except IngestionError as exc:
+        _write_failure_manifest(manifest_path, source, request, exc.stage, exc.reason)
+        raise PipelineError(str(exc)) from exc
+
+    try:
+        key = idempotency_key(source, acquired)
+        meta = to_dataset_metadata(
+            source,
+            acquired,
+            request.request_id,
+            __version__,
+            {"pipeline": request.pipeline},
+        )
+        try:
+            result = run_pipeline(meta, request.output)
+        except Exception as exc:  # noqa: BLE001 - stage boundaries are what the caller needs
+            _write_failure_manifest(manifest_path, source, request, "etl_running", str(exc))
+            raise PipelineError(f"[etl_running] source '{source.source_id}': {exc}") from exc
+
+        manifest = IngestionManifest(
+            source_id=source.source_id,
+            source_uri=sanitise_uri(source.uri),
+            connector=source.connector,
+            format=source.format,
+            request_id=request.request_id,
+            status="ingested",
+            acquired_at=meta.ingested_at,
+            checksum_sha256=acquired.checksum_sha256,
+            bytes=acquired.bytes,
+            content_type=acquired.content_type,
+            licence=source.licence,
+            attribution=source.attribution,
+            idempotency_key=key,
+            etl_output=str(result.location),
+            etl_rows=result.row_count,
+        )
+        write_manifest(manifest, manifest_path)
+
+        return {
+            "request_id": request.request_id,
+            "source_id": source.source_id,
+            "stages": [
+                {
+                    "stage": "ingesting",
+                    "status": "ingested",
+                    "checksum_sha256": acquired.checksum_sha256,
+                    "bytes": acquired.bytes,
+                },
+                {"stage": "etl_running", "status": "succeeded", "rows": result.row_count},
+            ],
+            "status": "succeeded",
+            "output": str(result.location),
+            "manifest": str(manifest_path),
+            "idempotency_key": key,
+            "rows": result.row_count,
+        }
+    finally:
+        cleanup_staging(staging)
+
+
 PIPELINES = {
     "healthcheck": _healthcheck,
     "tabular-normalize": _tabular_normalize,
+    "ingest-tabular": _ingest_tabular,
 }
 
 
@@ -88,6 +206,12 @@ def check_request(request: RunRequest) -> None:
     if not request.request_id.strip():
         raise PipelineError("request_id must not be empty")
     if request.pipeline == "healthcheck":
+        return
+    if request.pipeline == "ingest-tabular":
+        # Dry runs validate the source definition without touching the network or staging.
+        _source_or_error(request.source_id)
+        if request.output is None:
+            raise PipelineError("ingest-tabular needs --output")
         return
     if request.input is None or request.output is None:
         raise PipelineError("tabular-normalize needs --input and --output")

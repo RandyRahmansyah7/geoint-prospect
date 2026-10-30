@@ -35,6 +35,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--input", type=Path)
     run.add_argument("--output", type=Path)
     run.add_argument("--dataset-id")
+    run.add_argument("--source-id", help="registered source for ingestion pipelines")
     run.add_argument(
         "--dry-run", action="store_true", help="validate the request without processing"
     )
@@ -67,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
                 input=args.input,
                 output=args.output,
                 dataset_id=args.dataset_id,
+                source_id=args.source_id,
                 dry_run=args.dry_run,
             )
             data = execute(request)

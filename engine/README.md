@@ -33,6 +33,19 @@ the name is looked up in a registry, so it can never become a shell command.
 | --- | --- |
 | `healthcheck` | Reports Python and library versions of the runner. |
 | `tabular-normalize` | Reads a CSV/Parquet file, adds provenance, writes Parquet. |
+| `ingest-tabular` | Acquires a registered source into staging, then runs the ETL on it: `--source-id <id> --output <path>`. |
+
+`ingest-tabular` reports its stages (`ingesting` → `etl_running`) in the CLI answer, writes
+`<output>.manifest.json` linking source → request → output, and always removes its staging directory —
+also when a stage fails. Ingestion failure stops the ETL; the error names the stage and the source id.
+
+## Sources
+
+Acquisition only accepts a `source_id` from the registry in `configs/sources/` (one TOML per source,
+see that directory's README). Connectors stream into staging under `$RUNNER_TEMP`, hash while
+streaming, cap the size, and refuse plain http, private/loopback/link-local addresses, and redirects
+that leave the source host. New ids are rejected with the list of registered ones — a workflow input
+can never become a URL or a command.
 
 ## Modules
 
@@ -42,6 +55,8 @@ the name is looked up in a registry, so it can never become a shell command.
 | --- | --- |
 | `geoint_prospect.cli` | The stable command line contract described above. |
 | `geoint_prospect.pipelines` | Registry of requestable pipelines; unknown names are rejected before processing. |
+| `geoint_prospect.ingestion` | Source registry, streaming connectors (file/http), staging, manifest, and the hand-off to ETL. |
+| `geoint_prospect.repo` | Locates the repository root so source paths stay checkout-relative. |
 | `geoint_prospect.etl.contracts` | Pydantic metadata contract (`DatasetMetadata`): identifier, format, location, ingest time, licence, processing version, provenance. Unknown values stay `None`. |
 | `geoint_prospect.etl.ingest` | Scans CSV/Parquet into a **Polars `LazyFrame`** — no eager load, no full copy. |
 | `geoint_prospect.etl.transform` | Lazy Polars transforms: provenance columns, time-window filtering. Never fills missing values. |
@@ -52,7 +67,7 @@ the name is looked up in a registry, so it can never become a shell command.
 ## Data flow and boundaries
 
 ```
-CSV/Parquet ──scan──▶ Polars LazyFrame ──transform──▶ sink_parquet ─▶ Parquet
+source (file/https) ──stream+hash──▶ staging ──manifest──▶ ETL scan ──▶ Parquet + manifest.json
                              │
                              └──▶ DuckDB SQL (read_csv_auto/read_parquet) ──▶ Arrow table
 ```

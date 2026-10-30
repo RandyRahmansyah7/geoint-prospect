@@ -14,14 +14,20 @@ on:
         options:
           - healthcheck
           - tabular-normalize
+          - ingest-tabular
       request_id:
         description: App-generated id used to match this run with the request
         required: true
         type: string
       input_path:
-        description: Repository-relative path of the input dataset
+        description: Repository-relative path of the input dataset (tabular-normalize)
         required: false
         default: engine/tests/fixtures/observations.csv
+        type: string
+      source_id:
+        description: Registered source id from configs/sources (ingest-tabular)
+        required: false
+        default: fixtures-observations
         type: string
       dry_run:
         description: Validate the request without processing or publishing anything
@@ -49,6 +55,7 @@ jobs:
       PIPELINE: ${{ inputs.pipeline }}
       REQUEST_ID: ${{ inputs.request_id }}
       INPUT_PATH: ${{ inputs.input_path }}
+      SOURCE_ID: ${{ inputs.source_id }}
       DRY_RUN: ${{ inputs.dry_run }}
     steps:
       - uses: actions/checkout@v7
@@ -79,6 +86,9 @@ jobs:
           OUTPUT_PATH="$RUNNER_TEMP/geoint/$REQUEST_ID.parquet"
           args=(run --pipeline "$PIPELINE" --request-id "$REQUEST_ID" --input "$INPUT_PATH" \
                 --output "$OUTPUT_PATH" --json)
+          if [ -n "${SOURCE_ID:-}" ]; then
+            args+=(--source-id "$SOURCE_ID")
+          fi
           if [ "$DRY_RUN" = "true" ]; then
             args+=(--dry-run)
           fi
@@ -121,8 +131,19 @@ jobs:
             echo "| --- | --- |"
             echo "| request id | \`$REQUEST_ID\` |"
             echo "| pipeline | \`$PIPELINE\` |"
+            echo "| source id | \`${SOURCE_ID:-—}\` |"
             echo "| dry run | \`$DRY_RUN\` |"
             echo "| status | \`${{ job.status }}\` |"
-            echo ""
-            echo "Artifacts (when not a dry run) are debug-only and expire after 7 days."
           } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f "$RUNNER_TEMP/result.json" ]; then
+            {
+              echo ""
+              echo "| stage | status |"
+              echo "| --- | --- |"
+              jq -r '.data.stages[]? | "| \(.stage) | \(.status) |"' "$RUNNER_TEMP/result.json"
+              jq -r 'select(.ok == false) | "**error:** \(.error.message)"' "$RUNNER_TEMP/result.json"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "Artifacts (when not a dry run) are debug-only and expire after 7 days; staging files are removed by the engine." >> "$GITHUB_STEP_SUMMARY"
