@@ -27,6 +27,10 @@ from geoint_prospect.ingestion.acquire import (
 from geoint_prospect.ingestion.connectors import IngestionError
 from geoint_prospect.ingestion.contracts import IngestionManifest, IngestionPolicy, SourceDefinition
 from geoint_prospect.ingestion.registry import UnknownSourceError, resolve
+from geoint_prospect.storage.contracts import PublishResult
+from geoint_prospect.storage.keys import manifest_key, processed_key
+from geoint_prospect.storage.providers import StorageError, StorageProvider, build_providers
+from geoint_prospect.storage.publish import publish_file, publish_raw, summarise
 
 FORMAT_BY_SUFFIX = {".csv": DataFormat.csv, ".parquet": DataFormat.parquet}
 
@@ -43,6 +47,8 @@ class RunRequest:
     output: Path | None = None
     dataset_id: str | None = None
     source_id: str | None = None
+    publish: str = ""
+    store_raw: bool = False
     dry_run: bool = False
     problems: list[str] = field(default_factory=list)
 
@@ -89,6 +95,14 @@ def _tabular_normalize(request: RunRequest) -> dict[str, object]:
 
 def _manifest_path(output: Path) -> Path:
     return output.with_name(output.name + MANIFEST_SUFFIX)
+
+
+def _providers(spec: str) -> list[StorageProvider]:
+    """Explicit provider selection; missing secrets are a user error, not a crash."""
+    try:
+        return build_providers(spec)
+    except StorageError as exc:
+        raise PipelineError(str(exc)) from exc
 
 
 def _source_or_error(source_id: str | None) -> SourceDefinition:
@@ -150,6 +164,25 @@ def _ingest_tabular(request: RunRequest) -> dict[str, object]:
             _write_failure_manifest(manifest_path, source, request, "etl_running", str(exc))
             raise PipelineError(f"[etl_running] source '{source.source_id}': {exc}") from exc
 
+        storage_results: list[PublishResult] = []
+        if request.publish:
+            providers = _providers(request.publish)
+            workspace = Path(acquired.path).parent
+            if request.store_raw:
+                storage_results += publish_raw(
+                    Path(acquired.path),
+                    source_id=source.source_id,
+                    version=__version__,
+                    providers=providers,
+                    workspace=workspace,
+                )
+            storage_results += publish_file(
+                Path(result.location),
+                processed_key(result.dataset_id, request.request_id, Path(result.location).name),
+                providers,
+                workspace=workspace,
+            )
+
         manifest = IngestionManifest(
             source_id=source.source_id,
             source_uri=sanitise_uri(source.uri),
@@ -166,8 +199,23 @@ def _ingest_tabular(request: RunRequest) -> dict[str, object]:
             idempotency_key=key,
             etl_output=str(result.location),
             etl_rows=result.row_count,
+            storage=tuple(storage_results),
         )
         write_manifest(manifest, manifest_path)
+
+        if request.publish:
+            # The manifest travels with its output; its own verified status is reported by the CLI.
+            storage_results += publish_file(
+                manifest_path,
+                manifest_key(request.request_id),
+                providers,
+                workspace=Path(acquired.path).parent,
+            )
+            failures = summarise(storage_results)
+            if not failures["ok"]:
+                raise PipelineError(
+                    f"[storage] publish failed: {', '.join(failures['failed'])}"  # type: ignore[arg-type]
+                )
 
         return {
             "request_id": request.request_id,
@@ -186,6 +234,11 @@ def _ingest_tabular(request: RunRequest) -> dict[str, object]:
             "manifest": str(manifest_path),
             "idempotency_key": key,
             "rows": result.row_count,
+            "storage": {
+                "enabled": bool(request.publish),
+                "summary": summarise(storage_results),
+                "results": [entry.model_dump() for entry in storage_results],
+            },
         }
     finally:
         cleanup_staging(staging)
@@ -205,13 +258,18 @@ def check_request(request: RunRequest) -> None:
         raise PipelineError(f"unknown pipeline '{request.pipeline}'; available: {known}")
     if not request.request_id.strip():
         raise PipelineError("request_id must not be empty")
+    if request.publish and request.pipeline != "ingest-tabular":
+        raise PipelineError(f"--publish is not supported by '{request.pipeline}'")
     if request.pipeline == "healthcheck":
         return
     if request.pipeline == "ingest-tabular":
-        # Dry runs validate the source definition without touching the network or staging.
+        # Dry runs validate the source definition without touching the network or staging,
+        # and check that the requested storage providers are actually configured.
         _source_or_error(request.source_id)
         if request.output is None:
             raise PipelineError("ingest-tabular needs --output")
+        if request.publish:
+            _providers(request.publish)
         return
     if request.input is None or request.output is None:
         raise PipelineError("tabular-normalize needs --input and --output")
@@ -236,5 +294,11 @@ def execute(request: RunRequest) -> dict[str, object]:
             "validated": True,
             "input": str(request.input) if request.input else None,
             "output": str(request.output) if request.output else None,
+            "storage": {
+                "requested": request.publish or "none",
+                "providers": [p.config.provider.value for p in _providers(request.publish)]
+                if request.publish
+                else [],
+            },
         }
     return PIPELINES[request.pipeline](request)

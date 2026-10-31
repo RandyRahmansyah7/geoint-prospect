@@ -11,6 +11,7 @@ readme = "README.md"
 # supported runtime, so the versions pinned here describe the Actions environment.
 requires-python = ">=3.12"
 dependencies = [
+  "boto3>=1.35",
   "duckdb>=1.1",
   "polars>=1.9",
   "pyarrow>=17",

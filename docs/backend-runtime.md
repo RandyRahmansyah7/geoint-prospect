@@ -31,6 +31,8 @@ dispatches it.
 | `request_id` | App-generated id (UUID recommended). Names the run as `backend <request_id>` so the app can match it, and forms the concurrency group. |
 | `input_path` | Repository-relative path for `tabular-normalize`; absolute paths and `..` are rejected. |
 | `source_id` | Registered id from `configs/sources/` for `ingest-tabular`. Unknown ids are rejected by the engine with the list of registered ones. |
+| `providers` | Persistent storage targets, e.g. `b2` or `b2,filebase`. Empty (default) publishes nothing — the run only produces a debug artifact. See [`storage.md`](storage.md). |
+| `store_raw` | Also publish the acquired raw file under `raw/<source_id>/<version>/`. |
 | `dry_run` | Default `true`: validates the request and the source definition without fetching, writing, or publishing. |
 
 Arbitrary shell commands are impossible by design: pipeline names are looked up in a registry, and
@@ -122,9 +124,8 @@ manifest for 7 days.
 
 ## Not implemented yet
 
-- Production B2/Filebase connector inside the engine (the workflow uses `aws s3 cp` against the
-  S3-compatible endpoint; it needs real credentials to be exercised). Uploading the manifest alongside
-  the Parquet is part of that work.
+- **Real B2/Filebase uploads have not been executed** (no credentials yet). The engine side is done and
+  tested with a fake provider; see [`storage.md`](storage.md) for the smoke test that closes this gap.
 - HTTP sources that need authentication or pagination; only a single-request download is supported.
 - Only the `file` and `http` connectors exist; API connectors arrive when a real source needs one.
 - Cancellation and retry buttons in the UI.

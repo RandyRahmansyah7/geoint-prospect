@@ -192,6 +192,7 @@ python -m geoint_prospect <command> [--json]
 | #13 | Fondasi ETL engine (Polars, DuckDB, Arrow, Pydantic, Pandera) | §9 | #1 |
 | #14 | Runtime backend di GitHub Actions + pemicu dari desktop | §9, `docs/backend-runtime.md` | #13 |
 | #15 | Data ingestion (akuisisi sumber) → ETL di runner yang sama | §9, `configs/sources/README.md` | #13, #14 |
+| #16 | Storage layer: runner scratch, artifacts, B2, Filebase | §9, `docs/storage.md` | #13, #14, #15 |
 
 Belum dibuatkan issue (menunggu prasyarat): F-18 editor geometri + simpan ke `database/`, F-21
 legend, F-06 pembuatan layer, F-22 aksi analitik, heatmap peta (tunggu data nyata), serta workspace

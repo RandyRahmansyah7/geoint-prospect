@@ -9,6 +9,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 from geoint_prospect.etl.contracts import DataFormat
+from geoint_prospect.storage.contracts import PublishResult
 
 
 class ConnectorKind(StrEnum):
@@ -83,3 +84,5 @@ class IngestionManifest(BaseModel):
     etl_output: str | None = None
     etl_rows: int | None = None
     error: str | None = None
+    # Per-provider publish outcomes. Never carries credentials.
+    storage: tuple[PublishResult, ...] = ()

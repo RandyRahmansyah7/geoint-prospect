@@ -22,7 +22,9 @@ supported environment.
 ```
 python -m geoint_prospect pipelines list [--json]
 python -m geoint_prospect run --pipeline <name> --request-id <id> [--input PATH] [--output PATH]
-                                [--dataset-id ID] [--dry-run] [--json]
+                                [--dataset-id ID] [--source-id ID] [--publish b2[,filebase]]
+                                [--store-raw] [--dry-run] [--json]
+python -m geoint_prospect storage smoke --providers b2[,filebase] --request-id <id> [--keep] [--dry-run]
 ```
 
 Every answer is one envelope: `{"ok": bool, "data": ..., "error": ...}` with exit codes 0 (success),
@@ -38,6 +40,10 @@ the name is looked up in a registry, so it can never become a shell command.
 `ingest-tabular` reports its stages (`ingesting` → `etl_running`) in the CLI answer, writes
 `<output>.manifest.json` linking source → request → output, and always removes its staging directory —
 also when a stage fails. Ingestion failure stops the ETL; the error names the stage and the source id.
+
+With `--publish`, the same command uploads the Parquet, its manifest, and (with `--store-raw`) the
+acquired file to the named providers, verifies each object by read-back checksum, and fails the request
+if any provider failed. A dry run with `--publish` only validates that the provider secrets are wired.
 
 ## Sources
 
@@ -56,6 +62,7 @@ can never become a URL or a command.
 | `geoint_prospect.cli` | The stable command line contract described above. |
 | `geoint_prospect.pipelines` | Registry of requestable pipelines; unknown names are rejected before processing. |
 | `geoint_prospect.ingestion` | Source registry, streaming connectors (file/http), staging, manifest, and the hand-off to ETL. |
+| `geoint_prospect.storage` | S3-compatible providers (B2/Filebase) behind one adapter, object-key layout, checksum-verified publish, and a fake provider for tests. See `docs/storage.md`. |
 | `geoint_prospect.repo` | Locates the repository root so source paths stay checkout-relative. |
 | `geoint_prospect.etl.contracts` | Pydantic metadata contract (`DatasetMetadata`): identifier, format, location, ingest time, licence, processing version, provenance. Unknown values stay `None`. |
 | `geoint_prospect.etl.ingest` | Scans CSV/Parquet into a **Polars `LazyFrame`** — no eager load, no full copy. |

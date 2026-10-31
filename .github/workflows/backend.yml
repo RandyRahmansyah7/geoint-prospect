@@ -29,6 +29,16 @@ on:
         required: false
         default: fixtures-observations
         type: string
+      providers:
+        description: Persistent storage, e.g. "b2" or "b2,filebase" (empty = publish nothing)
+        required: false
+        default: ""
+        type: string
+      store_raw:
+        description: Also publish the acquired raw file (ingest-tabular only)
+        required: false
+        default: false
+        type: boolean
       dry_run:
         description: Validate the request without processing or publishing anything
         required: false
@@ -56,6 +66,8 @@ jobs:
       REQUEST_ID: ${{ inputs.request_id }}
       INPUT_PATH: ${{ inputs.input_path }}
       SOURCE_ID: ${{ inputs.source_id }}
+      PROVIDERS: ${{ inputs.providers }}
+      STORE_RAW: ${{ inputs.store_raw }}
       DRY_RUN: ${{ inputs.dry_run }}
     steps:
       - uses: actions/checkout@v7
@@ -81,7 +93,20 @@ jobs:
               ;;
           esac
 
+      # Provider secrets are scoped to this single step and never echoed. Publishing only happens
+      # when the caller asked for a provider; an empty `providers` input publishes nothing.
       - name: Run pipeline through the engine CLI
+        env:
+          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          B2_REGION: ${{ secrets.B2_REGION }}
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          FILEBASE_ENDPOINT: ${{ secrets.FILEBASE_ENDPOINT }}
+          FILEBASE_BUCKET: ${{ secrets.FILEBASE_BUCKET }}
+          FILEBASE_REGION: ${{ secrets.FILEBASE_REGION }}
+          FILEBASE_ACCESS_KEY: ${{ secrets.FILEBASE_ACCESS_KEY }}
+          FILEBASE_SECRET_KEY: ${{ secrets.FILEBASE_SECRET_KEY }}
         run: |
           set -euo pipefail
           # $RUNNER_TEMP is available in the shell; the publish step rebuilds the same path.
@@ -91,35 +116,19 @@ jobs:
           if [ -n "${SOURCE_ID:-}" ]; then
             args+=(--source-id "$SOURCE_ID")
           fi
+          if [ -n "${PROVIDERS:-}" ]; then
+            args+=(--publish "$PROVIDERS")
+            if [ "$STORE_RAW" = "true" ]; then
+              args+=(--store-raw)
+            fi
+          fi
           if [ "$DRY_RUN" = "true" ]; then
             args+=(--dry-run)
           fi
           python -m geoint_prospect "${args[@]}" | tee "$RUNNER_TEMP/result.json"
 
-      # Storage secrets stay scoped to this single step and are never echoed.
-      - name: Publish to persistent storage
-        if: ${{ inputs.dry_run == false }}
-        env:
-          STORAGE_BUCKET: ${{ secrets.GEOINT_STORAGE_BUCKET }}
-          STORAGE_ENDPOINT: ${{ secrets.GEOINT_STORAGE_ENDPOINT }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.GEOINT_STORAGE_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.GEOINT_STORAGE_SECRET }}
-        run: |
-          set -euo pipefail
-          OUTPUT_PATH="$RUNNER_TEMP/geoint/$REQUEST_ID.parquet"
-          if [ -z "${STORAGE_BUCKET:-}" ]; then
-            echo "::warning::persistent storage is not configured; result is only a debug artifact"
-            exit 0
-          fi
-          aws --endpoint-url "$STORAGE_ENDPOINT" s3 cp \
-            "$OUTPUT_PATH" "s3://$STORAGE_BUCKET/results/$REQUEST_ID.parquet"
-          # The manifest travels with its output so provenance is never orphaned.
-          if [ -f "$OUTPUT_PATH.manifest.json" ]; then
-            aws --endpoint-url "$STORAGE_ENDPOINT" s3 cp \
-              "$OUTPUT_PATH.manifest.json" "s3://$STORAGE_BUCKET/results/$REQUEST_ID.parquet.manifest.json"
-          fi
-
-      # Artifacts are debugging/transfer only — never permanent storage.
+      # Publishing happens inside the engine CLI (geoint_prospect.storage), not with ad-hoc CLI
+      # calls here. Artifacts below are debugging/transfer only — never permanent storage.
       - name: Upload debug artifact
         if: ${{ inputs.dry_run == false }}
         uses: actions/upload-artifact@v7
@@ -151,6 +160,11 @@ jobs:
               echo "| stage | status |"
               echo "| --- | --- |"
               jq -r '.data.stages[]? | "| \(.stage) | \(.status) |"' "$RUNNER_TEMP/result.json"
+              echo ""
+              echo "| storage target | key | status |"
+              echo "| --- | --- | --- |"
+              jq -r '.data.storage.results[]? | "| \(.provider) | \(.key) | \(.status) |"' "$RUNNER_TEMP/result.json"
+              jq -r 'select(.data.storage.enabled == false) | "storage: not requested (debug artifact only)"' "$RUNNER_TEMP/result.json"
               jq -r 'select(.ok == false) | "**error:** \(.error.message)"' "$RUNNER_TEMP/result.json"
             } >> "$GITHUB_STEP_SUMMARY"
           fi
